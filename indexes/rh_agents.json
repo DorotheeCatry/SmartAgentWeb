@@ -1,0 +1,22 @@
+[
+  {
+    "role": "recruiter",
+    "description": "Responsable du recrutement"
+  },
+  {
+    "role": "payroll",
+    "description": "Gere les salaires et la paie"
+  },
+  {
+    "role": "HR Analyst",
+    "description": "Analyse les donnees RH pour ameliorer les processus"
+  },
+  {
+    "role": "Talent Manager",
+    "description": "Gere les competences et le developpement des employees"
+  },
+  {
+    "role": "Employee Onboarding Specialist",
+    "description": "Coordonne l'integration des nouveaux employees"
+  }
+]

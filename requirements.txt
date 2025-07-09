@@ -35,3 +35,4 @@ langgraph-prebuilt
 langgraph-checkpoint
 langgraph-checkpoint-sqlite
 pytest
+sentence-transformers

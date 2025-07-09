@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import List, Mapping, Optional, Dict, Any
 from langchain_groq import ChatGroq
 from langchain.schema import AIMessage
+from langchain.llms.base import LLM
+from pydantic import PrivateAttr
 
 try:
     from langchain_ollama import OllamaLLM
@@ -94,3 +96,22 @@ class LLMManager:
 
     def get_model_info(self) -> Dict[str, Any]:
         return self.provider.get_model_info()
+
+
+class LangChainLLMWrapper(LLM):
+    _provider: LLMProvider = PrivateAttr()
+
+    def __init__(self, provider: LLMProvider, **kwargs):
+        super().__init__(**kwargs)
+        self._provider = provider
+
+    def _call(self, prompt: str, stop: Optional[List[str]] = None) -> str:
+        return self._provider.invoke(prompt)
+
+    @property
+    def _identifying_params(self) -> Mapping[str, Any]:
+        return {"provider": self._provider.get_model_info()}
+
+    @property
+    def _llm_type(self) -> str:
+        return "wrapped_llm"

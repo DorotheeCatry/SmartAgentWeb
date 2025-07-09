@@ -14,7 +14,7 @@ class SmartAgentConfig(BaseSettings):
 
     # === Chemins ===
     data_path: Path = Field(default=Path("./data"), description="Dossier contenant les documents sources")
-    vector_store_path: Path = Field(default=Path("./vector_stores"), description="Emplacement des index vectoriels")
+    vector_store_path: Path = Field(default=Path("./agents/vector"), description="Emplacement des index vectoriels")
     logs_path: Path = Field(default=Path("./logs"), description="Dossier pour logs")
 
     # === Modèles ===

@@ -1,0 +1,14 @@
+Table territories: colonnes = region_id, territory_id, territory_description
+Table order_details: colonnes = order_id, product_id, unit_price, quantity, discount
+Table employee_territories: colonnes = employee_id, territory_id
+Table us_states: colonnes = state_id, state_name, state_abbr, state_region
+Table customers: colonnes = customer_id, company_name, contact_name, contact_title, address, city, region, postal_code, country, phone, fax
+Table orders: colonnes = order_id, employee_id, order_date, required_date, shipped_date, ship_via, freight, ship_country, customer_id, ship_name, ship_address, ship_city, ship_region, ship_postal_code
+Table employees: colonnes = birth_date, photo, hire_date, reports_to, employee_id, address, city, region, postal_code, country, home_phone, extension, notes, photo_path, last_name, first_name, title, title_of_courtesy
+Table shippers: colonnes = shipper_id, company_name, phone
+Table products: colonnes = discontinued, reorder_level, product_id, supplier_id, category_id, unit_price, units_in_stock, units_on_order, product_name, quantity_per_unit
+Table categories: colonnes = category_id, picture, category_name, description
+Table suppliers: colonnes = supplier_id, company_name, contact_name, contact_title, address, city, region, postal_code, country, phone, fax, homepage
+Table region: colonnes = region_id, region_description
+Table customer_demographics: colonnes = customer_type_id, customer_desc
+Table customer_customer_demo: colonnes = customer_id, customer_type_id

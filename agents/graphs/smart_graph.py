@@ -4,6 +4,8 @@ from langgraph.graph import StateGraph, END
 from agents.nodes.web_agents.search_web_agent import SearchWebAgent
 from agents.nodes.web_agents.critique_agent import CritiqueAgent
 from agents.nodes.web_agents.validation_agent import ValidationAgent
+from agents.nodes.response_generation import node_generate_response
+from agents.conditions.complexity_router import complexity_router
 
 # Agents spécialisés
 search_agent = SearchWebAgent()
@@ -30,32 +32,44 @@ def node_validation(state: dict) -> dict:
     state["validation"] = output.get("validation", "")
     return state
 
-# === Fonctions de routage conditionnel ===
-
-def route_after_search(state: dict) -> str:
-    return "critique"
-
-def route_after_critique(state: dict) -> str:
-    critique = state.get("critique", "").lower()
-    return "validation" if "problème" in critique else END
-
-def route_after_validation(state: dict) -> str:
-    return END
-
 # === Création du graphe ===
 
 def create_smart_graph() -> StateGraph:
     graph = StateGraph(dict)
 
     graph.add_node("search", node_search)
+    graph.add_node("generate_response", node_generate_response)
     graph.add_node("critique", node_critique)
     graph.add_node("validation", node_validation)
 
     graph.set_entry_point("search")
 
-    graph.add_conditional_edges("search", route_after_search, {"critique": "critique"})
-    graph.add_conditional_edges("critique", route_after_critique, {"validation": "validation", END: END})
-    graph.add_conditional_edges("validation", route_after_validation, {END: END})
+    graph.add_conditional_edges(
+        "search",
+        complexity_router,  # 🔍 Appelle le LLM pour juger la complexité
+        {
+            "simple_path": "generate_response",
+            "reflection_path": "critique",
+        }
+    )
+
+    graph.add_conditional_edges(
+        "critique",
+        lambda state: "validation" if "problème" in state.get("critique", "").lower() else END,
+        {"validation": "validation", END: END}
+    )
+
+    graph.add_conditional_edges(
+        "generate_response",
+        lambda state: END,
+        {END: END}
+    )
+
+    graph.add_conditional_edges(
+        "validation",
+        lambda state: END,
+        {END: END}
+    )
 
     return graph
 
