@@ -1,0 +1,119 @@
+DATA/GENERATED_FILES/
+DATA/synthea/
+notebooks/base_medicale_augmented.csv
+notebooks/base_medicale_etendue_.csv
+notebooks/base_medicale_propre.csv
+notebooks/diabete_3.mp3
+notebooks/medical_dataset.csv
+notebooks/medical_dataset_enriched.csv
+notebooks/medical_dataset_with_entities_.csv
+notebooks/results/added_tokens.json
+notebooks/results/config.json
+notebooks/results/model.safetensors
+notebooks/results/sentencepiece.bpe.model
+notebooks/results/special_tokens_map.json
+notebooks/results/tokenizer.json
+notebooks/results/tokenizer_config.json
+notebooks/results/training_args.bin
+
+TEST_GPT/results/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.pyo
+
+# Virtualenv
+.venv/
+env/
+venv/
+
+# Django
+*.log
+*.pot
+*.pyc
+*.sqlite3
+db.sqlite3
+media/
+staticfiles/
+local_settings.py
+
+# VS Code
+.vscode/
+
+# Pytest
+.cache/
+.tox/
+.coverage
+htmlcov/
+
+# HuggingFace cache
+~/.cache/huggingface/
+~/.huggingface/
+
+# Tailwind & Node.js
+node_modules/
+package-lock.json
+*.css
+*.map
+theme/static/css/dist/
+theme/static_src/package-lock.json
+theme/static_src/postcss.config.js
+
+# Mac/Linux specific
+.DS_Store
+Thumbs.db
+
+# Jupyter / Notebook
+.ipynb_checkpoints/
+
+# Model checkpoints & outputs
+*.ckpt
+*.pt
+*.bin
+results/
+checkpoints/
+
+# Tailwind config
+theme/static_src/postcss.config.js
+
+# Visual Studio Code
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
+#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#  you could uncomment the following to ignore the enitre vscode folder
+# .vscode/
+
+# Ruff stuff:
+.ruff_cache/
+
+# PyPI configuration file
+.pypirc
+
+# Cursor
+#  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
+#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
+#  refer to https://docs.cursor.com/context/ignore-files
+.cursorignore
+.cursorindexingignore
+
+venv_nlp
+.env
+
+notebooks/.ipynb_checkpoints/
+notebooks/data
+
+.ipynb_checkpoints/
+poetry.lock
+
+*.log
+*.bak
+*.tmp
+.cache/
+# Django migration cache
+**/migrations/*.pyc
+**/migrations/__pycache__/
+migration/
+theme/
