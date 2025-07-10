@@ -1,15 +1,16 @@
 # === FICHIER: agents/vector/retriever.py ===
 import re
-import os, sys
+import os
 import json
 import psycopg2
 from langchain.docstore.document import Document
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_community.vectorstores import Chroma
 from core.llm_providers import LLMManager, LangChainLLMWrapper
-from langchain.agents import Tool, initialize_agent, AgentType
 from langgraph.graph import StateGraph, END
-from langchain.prompts import PromptTemplate
+from agents.nodes.hr_agents.critique_rh_agent import CritiqueRHAgent
+from agents.nodes.hr_agents.validation_rh_agent import ValidationRHAgent
+from agents.nodes.hr_agents.final_rh_agent import FinalRHAgent
 
 CHROMA_PATH = "indexes/northwind_chroma"
 description_path = "indexes/northwind_schema_description.txt"
@@ -31,8 +32,6 @@ def describe_pg_schema(limit_tables: int = None):
     conn.close()
     return "\n".join(summary)
 
-
-
 def suggest_agents_from_schema():
     schema_text = describe_pg_schema()
     llm = LLMManager().get_llm()
@@ -53,22 +52,15 @@ Déduis quels agents RH seraient utiles. Réponds STRICTEMENT sous forme JSON co
 """
     result = llm.invoke(prompt)
 
-    print("\n========== 🔎 Réponse brute LLM ==========")
-    print(result)
-    print("==========================================")
+    print("\n========== 🔎 Réponse brute LLM ==========\n" + result + "\n==========================================")
 
-    # Étape 1 : Essai normal
     try:
         agent_defs = json.loads(result)
         with open(AGENT_JSON_PATH, "w") as f:
             json.dump(agent_defs, f, indent=2)
         return agent_defs
-    except json.JSONDecodeError as e:
-        print(f"[!] JSON brut invalide : {e}")
-
-    # Étape 2 : Extraction JSON via regex
-    try:
-        json_match = re.search(r'\[\s*\{.*\}\s*\]', result, re.DOTALL)
+    except json.JSONDecodeError:
+        json_match = re.search(r'\[\s*\{.*?\}\s*\]', result, re.DOTALL)
         if json_match:
             json_text = json_match.group(0)
             agent_defs = json.loads(json_text)
@@ -76,14 +68,8 @@ Déduis quels agents RH seraient utiles. Réponds STRICTEMENT sous forme JSON co
                 json.dump(agent_defs, f, indent=2)
             print("[✔] JSON extrait avec succès par regex.")
             return agent_defs
-        else:
-            print("[!] Aucun bloc JSON détecté.")
-    except Exception as e:
-        print("[!] Erreur pendant parsing regex JSON:", e)
-
     print("[❌] Impossible de parser la réponse du LLM.")
     return []
-
 
 def extract_pg_structure():
     conn = psycopg2.connect(host="localhost", port=55432, dbname="northwind", user="postgres", password="postgres")
@@ -107,23 +93,13 @@ def extract_pg_structure():
 
 def ensure_index():
     if not os.path.exists(CHROMA_PATH):
-        print("#######Extract#######")
+        print("####### Extraction des documents #######")
         docs = extract_pg_structure()
-        print(f"docs: nombre = {len(docs)}, taille sys.getsizeof = {sys.getsizeof(docs)} bytes")
-        
-        print("#######embedding#######")
         embeddings = OllamaEmbeddings(model="mxbai-embed-large")
-        print(f"embeddings: type = {type(embeddings)}, taille sys.getsizeof = {sys.getsizeof(embeddings)} bytes")
-        
-        print("#######vectorstore#######")
-        #docs = docs[:3]
         vectorstore = Chroma.from_documents(docs, embedding=embeddings, persist_directory=CHROMA_PATH)
-        print(f"vectorstore: type = {type(vectorstore)}, taille sys.getsizeof = {sys.getsizeof(vectorstore)} bytes")
-        
         vectorstore.persist()
         with open(description_path, "w") as f:
             f.write(describe_pg_schema())
-        print("#######suggest_agents_from_schema#######")
         suggest_agents_from_schema()
 
 def get_rh_retriever():
@@ -133,7 +109,6 @@ def get_rh_retriever():
 
 def create_dynamic_rh_graph():
     graph = StateGraph(dict)
-
     raw_llm = LLMManager().get_llm()
     llm = LangChainLLMWrapper(raw_llm)
     retriever = get_rh_retriever()
@@ -145,16 +120,10 @@ def create_dynamic_rh_graph():
             agents = json.load(f)
 
     def make_node(role_name, description, retriever, llm):
-
-        def run_retriever(query: str) -> str:
-            docs = retriever.get_relevant_documents(query)
-            return "\n".join(doc.page_content for doc in docs)
-
         def node(state: dict) -> dict:
             query = state.get("query")
-            docs = retriever.get_relevant_documents(query)
-            context = "\n".join(doc.page_content for doc in docs)
-
+            docs = retriever.invoke(query)  # nouvelle méthode recommandée
+            context = "\n".join(str(doc.page_content) for doc in docs)
             prompt = f"""
             En tant qu'agent RH {role_name}, réponds à la question suivante à l'aide du contexte fourni.
             Retourne la réponse ainsi qu'un score de confiance entre 0 et 1 (float).
@@ -169,68 +138,62 @@ def create_dynamic_rh_graph():
             response = llm.invoke(prompt)
             try:
                 parsed = json.loads(response)
+                parsed["answer"] = str(parsed.get("answer", ""))  # sécurité
             except Exception:
-                parsed = {"answer": response, "confidence": 0.0}
-
+                parsed = {"answer": str(response), "confidence": 0.0}
             state[role_name] = parsed
             return state
-
         return node
 
-    # Ajout des agents dynamiquement
     for agent_def in agents:
         role = agent_def.get("role")
         description = agent_def.get("description", "")
         graph.add_node(role, make_node(role, description, retriever, llm))
 
-    # Ajout du noeud de validation finale
-    def final_decision_node(state):
-        CONFIDENCE_THRESHOLD = 0.8
+    critique_agent = CritiqueRHAgent()
+    validation_agent = ValidationRHAgent()
+    final_agent = FinalRHAgent()
 
-        results = []
-
-        print("\n🧠 Réponses des agents :")
-        for agent, response in state.items():
-            if isinstance(response, dict) and "confidence" in response:
-                try:
-                    confidence = float(response.get("confidence", 0))
-                except (ValueError, TypeError):
-                    confidence = 0.0
-
-                answer = response.get("answer", "")
-                print(f" - [{agent}] (confiance {confidence:.2f}) ➤ {answer}")
-                results.append((agent, confidence, answer))
-
-        if not results:
-            print("❌ Aucun agent n'a répondu.")
-            state["final_answer"] = "Aucune réponse"
-            return state
-
-        # Sélection automatique si une réponse dépasse le seuil
-        best_agent, best_conf, best_answer = max(results, key=lambda x: x[1])
-        if best_conf >= CONFIDENCE_THRESHOLD:
-            print(f"\n✅ Réponse sélectionnée automatiquement par [{best_agent}] (confiance {best_conf:.2f})")
-            print(f"Réponse : {best_answer}")
-            state["final_answer"] = best_answer
-        else:
-            print("\n⚠️ Confiance insuffisante. Aucune réponse ne dépasse le seuil.")
-            user_input = input("Entrez votre réponse manuelle : ")
-            state["final_answer"] = user_input
-
+    def critique_node(state: dict):
+        all_answers = [str(v["answer"]) for v in state.values() if isinstance(v, dict) and "answer" in v]
+        content = "\n\n".join(all_answers)
+        result = critique_agent.invoke({"content": content})
+        state["critiques"] = result.get("critique", "")
         return state
 
-    graph.add_node("validate", final_decision_node)
+    def validation_node(state: dict):
+        content = state.get("critiques", "")
+        result = validation_agent.invoke({"content": content})
+        state["validations"] = result.get("validation", "")
+        return state
 
-    # Connexion des noeuds
+    def final_node(state: dict):
+        all_answers = [str(v["answer"]) for v in state.values() if isinstance(v, dict) and "answer" in v]
+        answers = "\n".join(all_answers)
+        critiques = state.get("critiques", "")
+        validations = state.get("validations", "")
+        print("[DEBUG] Réponses agents:", all_answers)
+        print("[DEBUG] Critiques:", critiques)
+        print("[DEBUG] Validations:", validations)
+        result = final_agent.invoke({"answers": answers, "critiques": critiques, "validations": validations})
+        state["final_answer"] = result.get("final_answer", "Pas de réponse.")
+        return state
+
+    graph.add_node("critique", critique_node)
+    graph.add_node("validate", validation_node)
+    graph.add_node("final", final_node)
+
     if agents:
         roles = [agent["role"] for agent in agents]
         graph.set_entry_point(roles[0])
         for i in range(len(roles) - 1):
             graph.add_edge(roles[i], roles[i+1])
-        graph.add_edge(roles[-1], "validate")
-        graph.add_edge("validate", END)
+        graph.add_edge(roles[-1], "critique")
+        graph.add_edge("critique", "validate")
+        graph.add_edge("validate", "final")
+        graph.add_edge("final", END)
     else:
-        graph.set_entry_point("validate")
-        graph.add_edge("validate", END)
+        graph.set_entry_point("final")
+        graph.add_edge("final", END)
 
     return graph

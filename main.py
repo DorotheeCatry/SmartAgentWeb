@@ -4,30 +4,30 @@ from agents.vector.retrieve import create_dynamic_rh_graph, ensure_index
 from langgraph.graph import END
 
 def run_smart_agent():
-    print("Lancement du SmartWebAgent...")
+    print("🧠 Lancement du SmartWebAgent...")
     graph = create_smart_graph().compile()
     while True:
         query = input("\nPose ta question (ou 'exit') > ")
         if query.lower() == "exit":
             break
         result = graph.invoke({"query": query})
-        print("Réponse:", result)
+        print("\n=== ✅ Réponse Smart Agent ===")
+        print(result.get("answer", result))
+        print("=================================\n")
 
 def run_rh_agent():
-    print("Préparation du Retriever RH...")
-    ensure_index()  # crée index si besoin
+    print("👔 Préparation du Retriever RH...")
+    ensure_index()
     graph = create_dynamic_rh_graph().compile()
     while True:
         query = input("\nPose ta question RH (ou 'exit') > ")
         if query.lower() == "exit":
             break
         result = graph.invoke({"query": query})
-        # Affiche outputs de tous les agents
-        for key, val in result.items():
-            if key.endswith("_output"):
-                print(f"[{key}] -> {val}")
-        if END in result:
-            print("[Fin du graphe]")
+
+        print("\n=== ✅ Réponse Finale de l'Agent RH ===")
+        print(result.get("final_answer", "Aucune réponse générée."))
+        print("=======================================\n")
 
 if __name__ == "__main__":
     mode = None
