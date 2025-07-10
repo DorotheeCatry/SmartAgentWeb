@@ -10,6 +10,7 @@ from core.llm_providers import LLMManager, LangChainLLMWrapper
 from langgraph.graph import StateGraph, END
 from agents.nodes.hr_agents.critique_rh_agent import CritiqueRHAgent
 from agents.nodes.hr_agents.validation_rh_agent import ValidationRHAgent
+from agents.nodes.hr_agents.recruiter_agent import RecruiterAgent
 from agents.nodes.hr_agents.final_rh_agent import FinalRHAgent
 
 CHROMA_PATH = "indexes/northwind_chroma"
