@@ -63,23 +63,20 @@ def create_project_graph() -> StateGraph:
                 
                 result = agent.invoke(input_data)
                 
-                # Validation et réparation du JSON si nécessaire
+                # Validation et réparation du JSON
                 if isinstance(result, str):
-                    result = JSONRepairer.safe_parse(result)
+                    result = JSONRepairer.repair(result)
                 
-                # Mise à jour de l'état
-                new_state = dict(state)
-                new_state[key] = result
-                return new_state
+                return {key: result}
                 
             except Exception as e:
                 logger.error(f"Erreur dans le nœud {key}: {str(e)}")
-                new_state = dict(state)
-                new_state[key] = {
-                    "error": str(e),
-                    "status": "failed"
+                return {
+                    key: {
+                        "error": str(e),
+                        "stack_trace": f"{type(e).__name__}: {str(e)}"
+                    }
                 }
-                return new_state
         return node
 
     def critique_node(state: GraphState) -> Dict[str, Any]:
@@ -89,90 +86,72 @@ def create_project_graph() -> StateGraph:
             required_nodes = ["recruiter", "rh", "talent", "onboarding", "payroll"]
             
             for node in required_nodes:
-                if node in state and state[node]:
+                if node in state:
                     content = str(state[node])
-                    if len(content) > 1500:  # Limite de taille
-                        content = content[:750] + " [...] " + content[-750:]
+                    if len(content) > 2000:  # Limite de taille
+                        content = content[:1000] + " [...] " + content[-1000:]
                     content_parts.append(f"{node.upper()}:\n{content}")
             
             if not content_parts:
-                new_state = dict(state)
-                new_state["critique"] = {"error": "Aucune donnée à analyser"}
-                return new_state
+                return {"critique": {"error": "Aucune donnée à analyser"}}
             
-            critique_input = {"content": "\n\n".join(content_parts)[:8000]}  # Limite totale
-            critique_result = critique.invoke(critique_input)
-            
-            new_state = dict(state)
-            new_state["critique"] = critique_result
-            return new_state
+            critique_input = {"content": "\n\n".join(content_parts)[:10000]}  # Limite totale
+            return {"critique": critique.invoke(critique_input)}
             
         except Exception as e:
             logger.error(f"Erreur dans critique_node: {str(e)}")
-            new_state = dict(state)
-            new_state["critique"] = {"error": str(e)}
-            return new_state
+            return {"critique": {"error": str(e)}}
 
     def validation_node(state: GraphState) -> Dict[str, Any]:
         """Nœud de validation avec parsing sécurisé"""
         try:
             critique_content = state.get("critique", {})
-            
+            if isinstance(critique_content, str):
+                critique_content = JSONRepairer.repair(critique_content)
+                
             if not critique_content or "error" in critique_content:
-                new_state = dict(state)
-                new_state["validation"] = {
-                    "validation": "non valide", 
-                    "justification": "Critique invalide ou manquante"
-                }
-                return new_state
+                return {"validation": {"validation": "non valide", "justification": "Critique invalide"}}
                 
             validation_result = validation.invoke({"critique": critique_content})
             
-            new_state = dict(state)
-            new_state["validation"] = validation_result
-            return new_state
+            # Post-processing pour garantir le format
+            if isinstance(validation_result, str):
+                validation_result = JSONRepairer.repair(validation_result)
+                
+            return {"validation": validation_result}
             
         except Exception as e:
             logger.error(f"Erreur dans validation_node: {str(e)}")
-            new_state = dict(state)
-            new_state["validation"] = {
+            return {"validation": {
                 "validation": "erreur",
                 "justification": str(e)[:200]
-            }
-            return new_state
+            }}
 
     def final_node(state: GraphState) -> Dict[str, Any]:
         """Nœud final avec agrégation sécurisée"""
         try:
-            # Collecte des réponses des agents
-            agent_responses = {}
-            for key in ["recruiter", "rh", "talent", "onboarding", "payroll"]:
-                if key in state and state[key]:
-                    agent_responses[key] = state[key]
-            
             inputs = {
-                "answers": agent_responses,
+                "answers": "\n".join(
+                    str(state.get(k, "")) 
+                    for k in ["recruiter", "rh", "talent", "onboarding", "payroll"]
+                ),
                 "critiques": state.get("critique", {}),
                 "validations": state.get("validation", {})
             }
             
-            final_result = final.invoke(inputs)
+            # Nettoyage des inputs
+            for key in inputs:
+                if isinstance(inputs[key], str):
+                    inputs[key] = JSONRepairer.repair(inputs[key])
             
-            new_state = dict(state)
-            new_state["final_answer"] = final_result
-            return new_state
+            return {"final_answer": final.invoke(inputs)}
             
         except Exception as e:
             logger.error(f"Erreur dans final_node: {str(e)}")
-            new_state = dict(state)
-            new_state["final_answer"] = {
-                "faisabilite": "Erreur",
-                "conditions_reussite": ["Vérifier les logs système"],
-                "score_confiance": 0.0,
-                "recommandation": f"Erreur de traitement: {str(e)[:200]}",
-                "risques_principaux": ["Erreur technique dans l'analyse"]
-            }
-            return new_state
+            return {"final_answer": {
+                "error": str(e),
+                "recovery_suggestion": "Vérifier les logs système"
+            }}
 
     # Configuration des nœuds
     nodes_config = [
@@ -195,7 +174,7 @@ def create_project_graph() -> StateGraph:
     # Configuration du workflow
     graph.set_entry_point("dataanalyst")
     
-    # Branchement principal - tous les agents s'exécutent en parallèle après dataanalyst
+    # Branchement principal
     main_nodes = ["rh", "recruiter", "talent", "onboarding", "payroll"]
     for node in main_nodes:
         graph.add_edge("dataanalyst", node)
